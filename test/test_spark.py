@@ -23,13 +23,19 @@ import pytest
 import re
 import subprocess
 import time
-import torch
 import unittest
 import warnings
 
-from horovod.run.mpi_run import _get_mpi_implementation_flags
+import mock
+import torch
+
 import horovod.spark
 import horovod.torch as hvd
+
+from horovod.run.mpi_run import _get_mpi_implementation_flags
+from horovod.spark.common import util
+
+from spark_common import create_spark_context, create_xor_data, local_store
 
 from mock import MagicMock
 
@@ -212,3 +218,44 @@ class SparkTests(unittest.TestCase):
         self.assertTrue(len(actual_secret) > 0)
         self.assertEqual(actual_stdout, stdout)
         self.assertEqual(actual_stderr, stderr)
+
+    def test_df_cache(self):
+        # Clean the cache before starting the test
+        util.clear_training_cache()
+        util._training_cache.get = mock.Mock(side_effect=util._training_cache.get)
+
+        with create_spark_context() as sc:
+            with local_store() as store:
+                df = create_xor_data(sc)
+
+                key = (df.__hash__(), 0, None, store.get_train_data_path(),
+                       store.get_val_data_path())
+                assert not util._training_cache.is_cached(key)
+
+                train_rows, val_rows, metadata, avg_row_size = \
+                    util.prepare_data(num_processes=2,
+                                      store=store,
+                                      df=df,
+                                      feature_columns=['features'],
+                                      label_columns=['y'])
+
+                util._training_cache.get.assert_not_called()
+                assert len(util._training_cache._entries) == 1
+                assert util._training_cache.is_cached(key)
+
+                train_rows_cached, val_rows_cached, metadata_cached, avg_row_size_cached = \
+                    util.prepare_data(num_processes=2,
+                                      store=store,
+                                      df=df,
+                                      feature_columns=['features'],
+                                      label_columns=['y'])
+
+                util._training_cache.get.assert_called()
+                assert train_rows == train_rows_cached
+                assert val_rows == val_rows_cached
+                assert metadata == metadata_cached
+                assert avg_row_size == avg_row_size_cached
+
+                bad_key = (df.__hash__(), 0.1, None, store.get_train_data_path(),
+                           store.get_val_data_path())
+                assert not util._training_cache.is_cached(bad_key)
