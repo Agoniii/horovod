@@ -83,8 +83,10 @@ class TorchEstimatorParamsReadable(MLReadable):
 class TorchEstimator(Estimator, EstimatorParams, TorchEstimatorParamsWritable,
                      TorchEstimatorParamsReadable):
     input_shapes = Param(Params._dummy(), 'input_shapes', 'input layer shapes')
-    loss_constructor = Param(Params._dummy(), 'loss_constructor',
-                             'functions that construct the loss')
+    loss_constructors = Param(Params._dummy(), 'loss_constructors',
+                              'functions that construct the loss')
+    train_minibatch_fn = Param(Params._dummy(), 'train_minibatch_fn',
+                               'functions that construct the minibatch train function for torch')
 
     @keyword_only
     def __init__(self,
@@ -94,7 +96,7 @@ class TorchEstimator(Estimator, EstimatorParams, TorchEstimatorParamsWritable,
                  store=None,
                  optimizer=None,
                  loss=None,
-                 loss_constructor=None,
+                 loss_constructors=None,
                  metrics=None,
                  loss_weights=None,
                  sample_weight_col=None,
@@ -110,25 +112,36 @@ class TorchEstimator(Estimator, EstimatorParams, TorchEstimatorParamsWritable,
                  verbose=1,
                  shuffle_buffer_size=None,
                  partitions_per_process=None,
-                 run_id=None):
+                 run_id=None,
+                 train_minibatch_fn=None,
+                 train_steps_per_epoch=None,
+                 validation_steps_per_epoch=None):
         super(TorchEstimator, self).__init__()
-        self._setDefault(loss_constructor=None)
+        self._setDefault(loss_constructors=None,
+                         input_shapes=None,
+                         train_minibatch_fn=None)
 
         kwargs = self._input_kwargs
 
-        if EstimatorParams.loss.name in kwargs and TorchEstimator.loss_constructor.name in kwargs:
-            raise ValueError("only one of loss_constructor and loss parameters can be specified.")
+        if EstimatorParams.loss.name in kwargs and TorchEstimator.loss_constructors.name in kwargs:
+            raise ValueError("only one of loss_constructors and loss parameters can be specified.")
 
         if EstimatorParams.loss.name in kwargs and not \
                 (isinstance(loss, list) or isinstance(loss, tuple)):
             kwargs[EstimatorParams.loss.name] = [kwargs[EstimatorParams.loss.name]]
 
-        if TorchEstimator.loss_constructor.name in kwargs and not \
-                (isinstance(loss_constructor, list) or isinstance(loss_constructor, tuple)):
-            kwargs[TorchEstimator.loss_constructor.name] = [
-                kwargs[TorchEstimator.loss_constructor.name]]
+        if TorchEstimator.loss_constructors.name in kwargs and not \
+                (isinstance(loss_constructors, list) or isinstance(loss_constructors, tuple)):
+            kwargs[TorchEstimator.loss_constructors.name] = [
+                kwargs[TorchEstimator.loss_constructors.name]]
 
         self.setParams(**kwargs)
+
+    def setTrainMinibatchFn(self, value):
+        return self._set(train_minibatch_fn=value)
+
+    def getTrainMinibatchFn(self):
+        return self.getOrDefault(self.train_minibatch_fn)
 
     def setInputShapes(self, value):
         return self._set(input_shapes=value)
@@ -136,12 +149,16 @@ class TorchEstimator(Estimator, EstimatorParams, TorchEstimatorParamsWritable,
     def getInputShapes(self):
         return self.getOrDefault(self.input_shapes)
 
+    def setLossConstructors(self, value):
+        return self._set(loss_constructors=value)
+
     def getLossConstructors(self):
-        return self.getOrDefault(self.loss_constructor)
+        return self.getOrDefault(self.loss_constructors)
 
     def _get_optimizer(self):
         return self.getOrDefault(self.optimizer)
 
+    # Overwrites Model's getOptimizer method
     def getOptimizer(self):
         model = self.getModel()
         if model:
@@ -274,12 +291,17 @@ class TorchEstimator(Estimator, EstimatorParams, TorchEstimatorParamsWritable,
                     input_shapes=self.getInputShapes(),
                     label_columns=self.getLabelCols(),
                     run_id=run_id,
-                    _metadata=metadata)
+                    _metadata=metadata,
+                    loss=self.getLoss(),
+                    loss_constructors=self.getLossConstructors())
 
 
 class TorchModel(Model, ModelParams, TorchEstimatorParamsWritable, TorchEstimatorParamsReadable):
     optimizer = Param(Params._dummy(), 'optimizer', 'optimizer')
     input_shapes = Param(Params._dummy(), 'input_shapes', 'input layer shapes')
+    loss = Param(Params._dummy(), 'loss', 'loss')
+    loss_constructors = Param(Params._dummy(), 'loss_constructors',
+                              'functions that construct the loss')
 
     @keyword_only
     def __init__(self,
@@ -290,14 +312,33 @@ class TorchModel(Model, ModelParams, TorchEstimatorParamsWritable, TorchEstimato
                  label_columns=None,
                  optimizer=None,
                  run_id=None,
-                 _metadata=None):
+                 _metadata=None,
+                 loss=None,
+                 loss_constructors=None):
         super(TorchModel, self).__init__()
 
         if label_columns:
             self.setOutputCols([col + '__output' for col in label_columns])
-        kwargs = self._input_kwargs
 
+        self._setDefault(optimizer=None,
+                         loss=None,
+                         loss_constructors=None,
+                         input_shapes=None)
+
+        kwargs = self._input_kwargs
         self.setParams(**kwargs)
+
+    def setLoss(self, value):
+        return self._set(loss=value)
+
+    def getLoss(self):
+        return self.getOrDefault(self.loss)
+
+    def setLossConstructors(self, value):
+        return self._set(loss_constructors=value)
+
+    def getLossConstructors(self):
+        return self.getOrDefault(self.loss_constructors)
 
     def setInputShapes(self, value):
         return self._set(input_shapes=value)

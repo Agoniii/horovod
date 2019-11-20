@@ -48,6 +48,10 @@ class EstimatorParams(Params):
     batch_size = Param(Params._dummy(), 'batch_size', 'batch size',
                        typeConverter=TypeConverters.toInt)
     epochs = Param(Params._dummy(), 'epochs', 'epochs')
+    train_steps_per_epoch = Param(Params._dummy(), 'train_steps_per_epoch',
+                                  'number of training (batches) steps per epoch')
+    validation_steps_per_epoch = Param(Params._dummy(), 'validation_steps_per_epoch',
+                                       'number of steps (batches) for validation per epoch')
     validation_split = Param(Params._dummy(), 'validation_split', 'validation split',
                              typeConverter=TypeConverters.toFloat)
 
@@ -92,7 +96,9 @@ class EstimatorParams(Params):
             validation_split=0.0,
             shuffle_buffer_size=None,
             partitions_per_process=10,
-            run_id=None)
+            run_id=None,
+            train_steps_per_epoch=None,
+            validation_steps_per_epoch=None)
 
     def _should_validate(self):
         return self.getValidationCol() is not None or self.getValidationSplit() > 0
@@ -184,6 +190,18 @@ class EstimatorParams(Params):
 
     def getEpochs(self):
         return self.getOrDefault(self.epochs)
+
+    def setTrainStepsPerEpoch(self, value):
+        return self._set(train_steps_per_epoch=value)
+
+    def getTrainStepsPerEpoch(self):
+        return self.getOrDefault(self.train_steps_per_epoch)
+
+    def setValidationStepsPerEpoch(self, value):
+        return self._set(validation_steps_per_epoch=value)
+
+    def getValidationStepsPerEpoch(self):
+        return self.getOrDefault(self.validation_steps_per_epoch)
 
     def setValidationSplit(self, value):
         return self._set(validation_split=value)

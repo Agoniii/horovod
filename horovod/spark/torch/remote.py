@@ -41,10 +41,14 @@ def RemoteTrainer(estimator, metadata, last_checkpoint_state, run_id):
     should_validate = estimator._should_validate()
     batch_size = estimator.getBatchSize()
     epochs = estimator.getEpochs()
+    train_steps_per_epoch = estimator.getTrainStepsPerEpoch()
+    validation_steps_per_epoch = estimator.getValidationStepsPerEpoch()
     sample_weight_col = estimator.getSampleWeightCol()
     metric_fn_groups = estimator.getMetrics()
     user_shuffle_buffer_size = estimator.getShufflingBufferSize()
     user_verbose = estimator.getVerbose()
+    train_minibatch_fn = estimator.getTrainMinibatchFn()
+    train_minibatch = train_minibatch_fn() if train_minibatch_fn else _train_minibatch_fn()
 
     # If loss weight is not provided, use equal loss for all the labels
     label_columns = estimator.getLabelCols()
@@ -92,8 +96,7 @@ def RemoteTrainer(estimator, metadata, last_checkpoint_state, run_id):
             loss_fns = loss_fns_pre_train
         if loss_constructors:
             local_vars = locals()
-            loss_fns = [loss_constructor(**local_vars) for loss_constructor in
-                        loss_constructors]
+            loss_fns = [loss_constructor(**local_vars) for loss_constructor in loss_constructors]
 
         # Horovod: initialize library.
         hvd.init()
@@ -153,7 +156,10 @@ def RemoteTrainer(estimator, metadata, last_checkpoint_state, run_id):
         if sample_weight_col:
             schema_fields.append(sample_weight_col)
 
-        steps_per_epoch = int(math.ceil(float(train_rows) / batch_size / hvd.size()))
+        if train_steps_per_epoch is None:
+            steps_per_epoch = int(math.ceil(float(train_rows) / batch_size / hvd.size()))
+        else:
+            steps_per_epoch = train_steps_per_epoch
 
         with remote_store.get_local_output_dir() as run_output_dir:
             logs_dir = os.path.join(run_output_dir, remote_store.logs_subdir)
@@ -228,10 +234,22 @@ def RemoteTrainer(estimator, metadata, last_checkpoint_state, run_id):
                             'all_metrics': all_metric_groups_values
                         }
 
+                    def loss_fn(outputs, labels, sample_weights):
+                        loss = calculate_loss(outputs, labels, loss_weights, loss_fns, sample_weights)
+                        return loss
+
+                    def print_metrics(batch_idx, loss, metric_value_groups, phase):
+                        if user_verbose > 0 and hvd.rank() == 0 and \
+                                batch_idx % constants.METRIC_PRINT_FREQUENCY == 0:
+                            print("epoch:\t{epoch}\tstep\t{batch_idx}:\t{metrics}".
+                                  format(epoch=epoch,
+                                         batch_idx=batch_idx,
+                                         metrics=aggregate_metrics(phase, epoch, loss,
+                                                                   metric_value_groups)))
+
                     def _train(epoch):
                         model.train()
                         train_loss = metric_cls('loss', hvd)
-
                         metric_value_groups = construct_metric_value_holders(
                             metric_cls, metric_fn_groups, label_columns, hvd)
 
@@ -239,23 +257,21 @@ def RemoteTrainer(estimator, metadata, last_checkpoint_state, run_id):
                         for batch_idx in range(steps_per_epoch):
                             row = next(train_loader_iter)
                             inputs, labels, sample_weights = prepare_batch(row)
-
-                            optimizer.zero_grad()
-                            outputs = model(*inputs)
-                            outputs, labels = transform_outputs(outputs, labels)
-
-                            loss = calculate_loss(
-                                outputs, labels, loss_weights, loss_fns, sample_weights)
-                            train_loss.update(loss)
-                            loss.backward()
-                            optimizer.step()
+                            outputs, loss = train_minibatch(model, optimizer, transform_outputs,
+                                                            loss_fn, inputs, labels, sample_weights)
                             update_metrics(metric_value_groups, outputs, labels)
+                            train_loss.update(loss)
+                            print_metrics(batch_idx, train_loss, metric_value_groups, 'train')
+
                         return aggregate_metrics('train', epoch, train_loss, metric_value_groups)
 
                     if should_validate:
                         val_loader = DataLoader(val_reader, batch_size=batch_size)
                         val_loader_iter = iter(val_loader)
-                        validation_steps = int(math.ceil(float(val_rows) / batch_size / hvd.size()))
+                        if validation_steps_per_epoch is None:
+                            validation_steps = int(math.ceil(float(val_rows) / batch_size / hvd.size()))
+                        else:
+                            validation_steps = validation_steps_per_epoch
 
                         def _validate(epoch):
                             model.eval()
@@ -276,6 +292,7 @@ def RemoteTrainer(estimator, metadata, last_checkpoint_state, run_id):
                                     outputs, labels, loss_weights, loss_fns, sample_weights)
                                 val_loss.update(loss)
                                 update_metrics(metric_value_groups, outputs, labels)
+                                print_metrics(batch_idx, val_loss, metric_value_groups, 'val')
                             return aggregate_metrics('val', epoch, val_loss, metric_value_groups)
 
                     history = []
@@ -318,6 +335,18 @@ def RemoteTrainer(estimator, metadata, last_checkpoint_state, run_id):
 
                 return history, serialize_fn(model), serialize_fn(bio_opt)
     return train
+
+
+def _train_minibatch_fn():
+    def train_minibatch(model, optimizer, transform_outputs, loss_fn, inputs, labels, sample_weights):
+        optimizer.zero_grad()
+        outputs = model(*inputs)
+        outputs, labels = transform_outputs(outputs, labels)
+        loss = loss_fn(outputs, labels, sample_weights)
+        loss.backward()
+        optimizer.step()
+        return outputs, loss
+    return train_minibatch
 
 
 def _get_optimizer_with_unscaled_lr_fn():

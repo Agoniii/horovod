@@ -132,7 +132,9 @@ class KerasEstimator(Estimator, EstimatorParams, KerasEstimatorParamsReadable,
                  verbose=None,
                  shuffle_buffer_size=None,
                  partitions_per_process=None,
-                 run_id=None):
+                 run_id=None,
+                 train_steps_per_epoch=None,
+                 validation_steps_per_epoch=None):
 
         super(KerasEstimator, self).__init__()
 

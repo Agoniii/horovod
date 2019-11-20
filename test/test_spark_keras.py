@@ -51,6 +51,35 @@ def get_mock_fit_fn():
     return fit
 
 
+def test_fit_model():
+    model = create_xor_model()
+    optimizer = tf.keras.optimizers.SGD(lr=0.1)
+    loss = 'binary_crossentropy'
+
+    with create_spark_context() as sc:
+        df = create_xor_data(sc)
+
+        with local_store() as store:
+            keras_estimator = hvd.KerasEstimator(
+                num_proc=2,
+                store=store,
+                model=model,
+                optimizer=optimizer,
+                loss=loss,
+                feature_cols=['features'],
+                label_cols=['y'],
+                batch_size=1,
+                epochs=3,
+                verbose=2)
+
+            keras_model = keras_estimator.fit(df)
+
+            trained_model = keras_model.getModel()
+            pred = trained_model.predict([np.ones([1, 2], dtype=np.float64)])
+            assert len(pred) == 1
+            assert pred.dtype == np.float64
+
+
 @mock.patch('horovod.spark.keras.util.TFKerasUtil.fit_fn')
 def test_restore_from_checkpoint(mock_fit_fn):
     mock_fit_fn.return_value = get_mock_fit_fn()

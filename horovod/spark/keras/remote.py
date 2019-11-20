@@ -38,6 +38,8 @@ def RemoteTrainer(estimator, metadata, keras_utils, run_id):
     user_callbacks = estimator.getCallbacks()
     batch_size = estimator.getBatchSize()
     epochs = estimator.getEpochs()
+    train_steps_per_epoch = estimator.getTrainStepsPerEpoch()
+    validation_steps_per_epoch = estimator.getValidationStepsPerEpoch()
     sample_weight_col = estimator.getSampleWeightCol()
     custom_objects = estimator.getCustomObjects()
     should_validate = estimator._should_validate()
@@ -133,13 +135,19 @@ def RemoteTrainer(estimator, metadata, keras_utils, run_id):
                     callbacks.append(k.callbacks.TensorBoard(logs_dir))
                     callbacks.append(SyncCallback(run_output_dir, remote_store.sync, k))
 
-            steps_per_epoch = int(math.ceil(train_rows / batch_size / hvd.size()))
+            if train_steps_per_epoch is None:
+                steps_per_epoch = int(math.ceil(train_rows / batch_size / hvd.size()))
+            else:
+                steps_per_epoch = train_steps_per_epoch
 
-            # math.ceil because if val_rows is smaller than batch_size we still get the at least
-            # one step. float(val_rows) because val_rows/batch_size evaluates to zero before
-            # math.ceil
-            validation_steps = int(math.ceil(float(val_rows) / batch_size / hvd.size())) \
-                if should_validate else None
+            if validation_steps_per_epoch is None:
+                # math.ceil because if val_rows is smaller than batch_size we still get the at least
+                # one step. float(val_rows) because val_rows/batch_size evaluates to zero before
+                # math.ceil
+                validation_steps = int(math.ceil(float(val_rows) / batch_size / hvd.size())) \
+                    if should_validate else None
+            else:
+                validation_steps = validation_steps_per_epoch
 
             schema_fields = feature_columns + label_columns
             if sample_weight_col:
