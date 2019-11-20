@@ -201,24 +201,18 @@ class TorchEstimator(Estimator, EstimatorParams, TorchEstimatorParamsWritable,
     def _fit(self, df):
         validation_split = self.getValidationSplit()
         validation_col = self.getValidationCol()
-        backend = self.getBackend()
         store = self.getStore()
         label_columns = self.getLabelCols()
         feature_columns = self.getFeatureCols()
         sample_weight_col = self.getSampleWeightCol()
         partitions_per_process = self.getPartitionsPerProcess()
 
-        num_processes = self.getNumProc()
-        if (num_processes is None) == (backend is None):
-            raise ValueError('Exactly one of parameters "num_processes" and "backend" '
-                             'must be specified')
-        elif backend is None:
-            backend = SparkBackend(num_processes)
-        elif num_processes is None:
-            num_processes = backend.num_processes()
+        backend = self.getBackend()
+        if backend is None:
+            backend = SparkBackend(self.getNumProc())
 
         train_rows, val_rows, metadata, avg_row_size = \
-            util.prepare_data(num_processes,
+            util.prepare_data(backend.num_processes(),
                               store,
                               df,
                               label_columns=label_columns,

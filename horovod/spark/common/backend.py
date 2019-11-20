@@ -15,8 +15,18 @@
 
 from __future__ import absolute_import
 
+import horovod.spark.common._namedtuple_fix
+
+import os
+
+import pyspark
 
 import horovod.spark
+
+
+def default_num_proc():
+    spark_context = pyspark.SparkContext._active_spark_context
+    return spark_context.defaultParallelism
 
 
 class Backend(object):
@@ -28,11 +38,16 @@ class Backend(object):
 
 
 class SparkBackend(Backend):
-    def __init__(self, num_proc):
-        self._num_proc = num_proc
+    def __init__(self, num_proc=None, env=None):
+        self._num_proc = num_proc or default_num_proc()
+        self._env = env
 
     def run(self, fn, args=(), kwargs={}, env=None):
-        return horovod.spark.run(fn, args=args, kwargs=kwargs, num_proc=self._num_proc, env=env)
+        full_env = self._env or os.environ.copy()
+        if env:
+            full_env.update(env)
+        return horovod.spark.run(fn, args=args, kwargs=kwargs,
+                                 num_proc=self._num_proc, env=full_env)
 
     def num_processes(self):
         return self._num_proc
