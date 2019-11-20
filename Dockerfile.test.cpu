@@ -12,7 +12,6 @@ ARG PYTORCH_PACKAGE=torch==1.2.0+cpu
 ARG TORCHVISION_PACKAGE=torchvision==0.4.0+cpu
 ARG MXNET_PACKAGE=mxnet==1.5.0
 ARG PYSPARK_PACKAGE=pyspark==2.4.0
-ARG HOROVOD_BUILD_FLAGS="HOROVOD_WITH_SPARK=1"
 
 # Set default shell to /bin/bash
 SHELL ["/bin/bash", "-cu"]
@@ -142,9 +141,11 @@ RUN if [[ ${MPI_KIND} == "MLSL" ]]; then \
       fi; \
       source /usr/local/mlsl/intel64/bin/mlslvars.sh "thread"; \
       echo "pip install horovod, mpicxx is $(which mpicxx)"; \
-      ${HOROVOD_BUILD_FLAGS} pip install -v /horovod/dist/horovod-*.tar.gz; \
+      export HOROVOD_WITH_SPARK=1; \
+      pip install -v /horovod/dist/horovod-*.tar.gz; \
     else \
-      ${HOROVOD_BUILD_FLAGS} pip install -v /horovod/dist/horovod-*.tar.gz; \
+      export HOROVOD_WITH_SPARK=1; \
+      pip install -v /horovod/dist/horovod-*.tar.gz; \
     fi
 
 # Hack for compatibility of MNIST example with TensorFlow 1.1.0.
