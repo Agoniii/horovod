@@ -100,7 +100,6 @@ keras_estimator = hvd.KerasEstimator(num_proc=args.num_proc,
                                      verbose=1)
 
 keras_model = keras_estimator.fit(train_df).setOutputCols(['label_pred'])
-# keras_model = keras_estimator.fit_on_parquet().setOutputCols(['label_pred'])
 
 # Evaluate the model on the held-out test DataFrame
 pred_df = keras_model.transform(test_df)
