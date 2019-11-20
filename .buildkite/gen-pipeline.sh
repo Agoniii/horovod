@@ -177,6 +177,11 @@ run_all() {
       ":muscle: Test TensorFlow 2.0 Keras MNIST (${test})" \
       "bash -c \"\\\$(cat /mpirun_command) python /horovod/examples/tensorflow2_keras_mnist.py\""
   fi
+
+  # Horovod Spark Estimator tests
+  run_test "${test}" "${queue}" \
+    ":muscle: Test Spark Keras MNIST (${test})" \
+    "bash -c \"OMP_NUM_THREADS=1 python /horovod/examples/keras_spark_mnist.py\""
 }
 
 run_gloo() {
