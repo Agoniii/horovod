@@ -171,7 +171,11 @@ class LocalStore(PrefixStore):
         @contextlib.contextmanager
         def local_run_path():
             if not os.path.exists(run_path):
-                os.makedirs(run_path)
+                try:
+                    os.makedirs(run_path)
+                except OSError:
+                    # Race condition from workers on the same host: ignore
+                    pass
             yield run_path
 
         return local_run_path

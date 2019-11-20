@@ -75,9 +75,9 @@ def test_fit_model():
             keras_model = keras_estimator.fit(df)
 
             trained_model = keras_model.getModel()
-            pred = trained_model.predict([np.ones([1, 2], dtype=np.float64)])
+            pred = trained_model.predict([np.ones([1, 2], dtype=np.float32)])
             assert len(pred) == 1
-            assert pred.dtype == np.float64
+            assert pred.dtype == np.float32
 
 
 @mock.patch('horovod.spark.keras.util.TFKerasUtil.fit_fn')

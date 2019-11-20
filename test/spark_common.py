@@ -18,12 +18,9 @@ from __future__ import absolute_import
 import contextlib
 import os
 import platform
-import threading
 
-import pyspark
 from pyspark.ml import Pipeline
 from pyspark.ml.feature import VectorAssembler
-from pyspark.sql import SparkSession
 from pyspark.sql.types import FloatType, IntegerType, StructField, StructType
 
 from horovod.spark.common.store import LocalStore

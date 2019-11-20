@@ -1437,7 +1437,7 @@ if os.environ.get('HOROVOD_WITH_SPARK'):
         'h5py>=2.9',
         'numpy',
         'petastorm',
-        'pyarrow==0.14.1',  # Petastorm is not compatible with 0.15.0 yet
+        'pyarrow>=0.15.0',  # Petastorm 0.7.7 is not compatible with < 0.15.0
         'pyspark'
     ]
 
