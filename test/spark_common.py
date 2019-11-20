@@ -30,9 +30,6 @@ from horovod.spark.common.store import LocalStore
 
 from common import tempdir
 
-sc = None
-lock = threading.Lock()
-
 # Spark will fail to initialize correctly locally on Mac OS without this
 if platform.system() == 'Darwin':
     os.environ['OBJC_DISABLE_INITIALIZE_FORK_SAFETY'] = 'YES'
@@ -54,24 +51,28 @@ def local_store():
 
 
 @contextlib.contextmanager
-def create_spark_context():
-    global sc
-    if sc is None:
-        with lock:
-            if sc is None:
-                spark = SparkSession.builder.master('local') \
-                    .appName('myAppName').config('spark.executor.memory', '5gb') \
-                    .config("spark.cores.max", "6").getOrCreate()
-                sc = spark.sparkContext
-    yield sc
+def spark_session(app, cores=2, *args):
+    from pyspark import SparkConf
+    from pyspark.sql import SparkSession
+
+    conf = SparkConf().setAppName(app).setMaster('local[{}]'.format(cores))
+    session = SparkSession \
+        .builder \
+        .config(conf=conf) \
+        .getOrCreate()
+
+    try:
+        yield session
+    finally:
+        session.stop()
 
 
-def create_xor_data(sc):
+def create_xor_data(spark):
     data = [[0, 0, 0.0], [0, 1, 1.0], [1, 0, 1.0], [1, 1, 0.0]]
     schema = StructType([StructField('x1', IntegerType()),
                              StructField('x2', IntegerType()),
                              StructField('y', FloatType())])
-    raw_df = create_test_data_from_schema(sc, data, schema)
+    raw_df = create_test_data_from_schema(spark, data, schema)
 
     vector_assembler = VectorAssembler().setInputCols(['x1', 'x2']).setOutputCol('features')
     pipeline = Pipeline().setStages([vector_assembler])
@@ -80,6 +81,5 @@ def create_xor_data(sc):
     return df
 
 
-def create_test_data_from_schema(sc, data, schema):
-    sqlContext = pyspark.SQLContext(sc)
-    return sqlContext.createDataFrame(data, schema=schema)
+def create_test_data_from_schema(spark, data, schema):
+    return spark.createDataFrame(data, schema=schema)

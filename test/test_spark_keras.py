@@ -30,7 +30,7 @@ from horovod.spark.keras.estimator import EstimatorParams
 from horovod.spark.keras.util import _custom_sparse_to_dense_fn, _serialize_param_value, BareKerasUtil, TFKerasUtil
 
 from common import temppath
-from spark_common import CallbackBackend, create_spark_context, create_xor_data, local_store
+from spark_common import CallbackBackend, create_xor_data, local_store, spark_session
 
 
 def create_xor_model():
@@ -56,8 +56,8 @@ def test_fit_model():
     optimizer = tf.keras.optimizers.SGD(lr=0.1)
     loss = 'binary_crossentropy'
 
-    with create_spark_context() as sc:
-        df = create_xor_data(sc)
+    with spark_session('test_fit_model') as spark:
+        df = create_xor_data(spark)
 
         with local_store() as store:
             keras_estimator = hvd.KerasEstimator(
@@ -88,8 +88,8 @@ def test_restore_from_checkpoint(mock_fit_fn):
     optimizer = tf.keras.optimizers.SGD(lr=0.1)
     loss = 'binary_crossentropy'
 
-    with create_spark_context() as sc:
-        df = create_xor_data(sc)
+    with spark_session('test_restore_from_checkpoint') as spark:
+        df = create_xor_data(spark)
 
     backend = CallbackBackend()
 
@@ -130,8 +130,8 @@ def test_restore_from_checkpoint(mock_fit_fn):
 def test_keras_direct_parquet_train(mock_fit_fn):
     mock_fit_fn.return_value = get_mock_fit_fn()
 
-    with create_spark_context() as sc:
-        df = create_xor_data(sc)
+    with spark_session('test_keras_direct_parquet_train') as spark:
+        df = create_xor_data(spark)
 
     backend = CallbackBackend()
     with local_store() as store:
@@ -172,8 +172,8 @@ def test_model_serialization(mock_remote_trainer):
         return None, serialized_model, 2
     mock_remote_trainer.return_value = train
 
-    with create_spark_context() as sc:
-        df = create_xor_data(sc)
+    with spark_session('test_model_serialization') as spark:
+        df = create_xor_data(spark)
 
     keras_estimator = hvd.KerasEstimator(
         model=model,
