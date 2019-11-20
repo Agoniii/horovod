@@ -210,6 +210,14 @@ class KerasEstimator(Estimator, EstimatorParams, KerasEstimatorParamsReadable,
                          for output in model.outputs]
         return input_shapes, output_shapes
 
+    def _get_or_create_backend(self):
+        backend = self.getBackend()
+        if backend is None:
+            backend = SparkBackend(self.getNumProc())
+        elif self.getNumProc() is not None:
+            raise ValueError('At most one of parameters "backend" and "num_proc" may be specified')
+        return backend
+
     def fit_on_parquet(self, params=None):
         if params:
             return self.copy(params)._fit_on_parquet()
@@ -217,7 +225,7 @@ class KerasEstimator(Estimator, EstimatorParams, KerasEstimatorParamsReadable,
             return self._fit_on_parquet()
 
     def _fit_on_parquet(self):
-        backend = self.getBackend()
+        backend = self._get_or_create_backend()
         store = self.getStore()
         label_columns = self.getLabelCols()
         feature_columns = self.getFeatureCols()
@@ -232,6 +240,7 @@ class KerasEstimator(Estimator, EstimatorParams, KerasEstimatorParamsReadable,
         return self._fit_on_prepared_data(backend, train_rows, val_rows, metadata, avg_row_size)
 
     def _fit(self, df):
+        backend = self._get_or_create_backend()
         validation_split = self.getValidationSplit()
         validation_col = self.getValidationCol()
         store = self.getStore()
@@ -239,10 +248,6 @@ class KerasEstimator(Estimator, EstimatorParams, KerasEstimatorParamsReadable,
         feature_columns = self.getFeatureCols()
         sample_weight_col = self.getSampleWeightCol()
         partitions_per_process = self.getPartitionsPerProcess()
-
-        backend = self.getBackend()
-        if backend is None:
-            backend = SparkBackend(self.getNumProc())
 
         train_rows, val_rows, metadata, avg_row_size = \
             util.prepare_data(backend.num_processes(),

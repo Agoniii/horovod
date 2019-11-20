@@ -5,7 +5,7 @@ import os
 import subprocess
 
 from pyspark import SparkConf
-from pyspark.ml.evaluation import BinaryClassificationEvaluator
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 from pyspark.ml.feature import OneHotEncoderEstimator
 from pyspark.sql import SparkSession
 
@@ -32,11 +32,15 @@ parser.add_argument('--work-dir', default='/tmp',
 
 args = parser.parse_args()
 
+# Initialize SparkSession
 conf = SparkConf().setAppName('keras_spark_mnist').set('spark.sql.shuffle.partitions', '16')
 if args.master:
     conf.setMaster(args.master)
+elif args.num_proc:
+    conf.setMaster('local[{}]'.format(args.num_proc))
 spark = SparkSession.builder.config(conf=conf).getOrCreate()
 
+# Setup our store for intermediate data
 work_dir = args.work_dir
 hdfs_prefix = 'hdfs://'
 if work_dir.startswith(hdfs_prefix):
@@ -45,21 +49,28 @@ if work_dir.startswith(hdfs_prefix):
 else:
     store = LocalStore(work_dir)
 
+# Download MNIST dataset
 data_url = 'https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/multiclass/mnist.bz2'
 libsvm_path = os.path.join(work_dir, 'mnist.bz2')
 if not os.path.exists(libsvm_path):
     subprocess.check_output(['wget', data_url, '-O', libsvm_path])
 
+# Load dataset into a Spark DataFrame
 df = spark.read.format('libsvm') \
     .option('numFeatures', '784') \
     .load(libsvm_path)
 
+# One-hot encode labels into SparseVectors
 encoder = OneHotEncoderEstimator(inputCols=['label'],
                                  outputCols=['label_vec'],
                                  dropLast=False)
 model = encoder.fit(df)
 train_df = model.transform(df)
 
+# Train/test split
+train_df, test_df = train_df.randomSplit([0.9, 0.1])
+
+# Define the Keras model without any Horovod-specific parameters
 model = Sequential()
 model.add(Conv2D(32, kernel_size=(3, 3),
                  activation='relu',
@@ -75,7 +86,7 @@ model.add(Dense(10, activation='softmax'))
 optimizer = keras.optimizers.Adadelta(1.0)
 loss = keras.losses.categorical_crossentropy
 
-store = LocalStore('/tmp')
+# Train a Horovod Spark Estimator on the DataFrame
 keras_estimator = hvd.KerasEstimator(num_proc=args.num_proc,
                                      store=store,
                                      model=model,
@@ -84,14 +95,16 @@ keras_estimator = hvd.KerasEstimator(num_proc=args.num_proc,
                                      metrics=['accuracy'],
                                      feature_cols=['features'],
                                      label_cols=['label_vec'],
-                                     batch_size=128,
-                                     epochs=12,
+                                     batch_size=args.batch_size,
+                                     epochs=args.epochs,
                                      verbose=1)
 
-keras_model = keras_estimator.fit(train_df).setOutputCols(['y_pred'])
+keras_model = keras_estimator.fit(train_df).setOutputCols(['label_pred'])
+# keras_model = keras_estimator.fit_on_parquet().setOutputCols(['label_pred'])
 
-# pred_df = keras_model.transform(test_df)
-# evaluator = BinaryClassificationEvaluator(rawPredictionCol='y_pred', labelCol='y')
-# print('Test area under ROC:', evaluator.evaluate(pred_df))
+# Evaluate the model on the held-out test DataFrame
+pred_df = keras_model.transform(test_df)
+evaluator = MulticlassClassificationEvaluator(predictionCol='label_pred', labelCol='label_vec', metricName='accuracy')
+print('Test accuracy:', evaluator.evaluate(pred_df))
 
 spark.stop()
