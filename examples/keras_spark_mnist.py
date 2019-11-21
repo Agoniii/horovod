@@ -4,11 +4,16 @@ import argparse
 import os
 import subprocess
 
+import numpy as np
+
+import pyspark.sql.functions as F
+import pyspark.sql.types as T
 from pyspark import SparkConf
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 from pyspark.ml.feature import OneHotEncoderEstimator
 from pyspark.sql import SparkSession
 
+import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Dropout, Flatten
@@ -70,6 +75,9 @@ train_df = model.transform(df)
 # Train/test split
 train_df, test_df = train_df.randomSplit([0.9, 0.1])
 
+# Disable GPUs when building the model to prevent memory leaks
+keras.backend.set_session(tf.Session(config=tf.ConfigProto(device_count={'GPU': 0})))
+
 # Define the Keras model without any Horovod-specific parameters
 model = Sequential()
 model.add(Conv2D(32, kernel_size=(3, 3),
@@ -99,11 +107,13 @@ keras_estimator = hvd.KerasEstimator(num_proc=args.num_proc,
                                      epochs=args.epochs,
                                      verbose=1)
 
-keras_model = keras_estimator.fit(train_df).setOutputCols(['label_pred'])
+keras_model = keras_estimator.fit(train_df).setOutputCols(['label_prob'])
 
 # Evaluate the model on the held-out test DataFrame
 pred_df = keras_model.transform(test_df)
-evaluator = MulticlassClassificationEvaluator(predictionCol='label_pred', labelCol='label_vec', metricName='accuracy')
+argmax = F.udf(lambda v: float(np.argmax(v)), returnType=T.DoubleType())
+pred_df = pred_df.withColumn('label_pred', argmax(pred_df.label_prob))
+evaluator = MulticlassClassificationEvaluator(predictionCol='label_pred', labelCol='label', metricName='accuracy')
 print('Test accuracy:', evaluator.evaluate(pred_df))
 
 spark.stop()
