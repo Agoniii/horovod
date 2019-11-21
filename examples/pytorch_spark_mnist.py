@@ -6,12 +6,12 @@ import subprocess
 
 import numpy as np
 
-import pyspark.sql.functions as F
 import pyspark.sql.types as T
 from pyspark import SparkConf
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 from pyspark.ml.feature import OneHotEncoderEstimator
 from pyspark.sql import SparkSession
+from pyspark.sql.functions import udf
 
 import torch.nn as nn
 import torch.nn.functional as F
@@ -96,7 +96,7 @@ class Net(nn.Module):
 
 model = Net()
 optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.5)
-loss = F.nll_loss
+loss = nn.NLLLoss()
 
 # Train a Horovod Spark Estimator on the DataFrame
 torch_estimator = hvd.TorchEstimator(num_proc=args.num_proc,
@@ -104,10 +104,9 @@ torch_estimator = hvd.TorchEstimator(num_proc=args.num_proc,
                                      model=model,
                                      optimizer=optimizer,
                                      loss=loss,
-                                     metrics=['accuracy'],
                                      input_shapes=[[-1, 1, 28, 28]],
                                      feature_cols=['features'],
-                                     label_cols=['label_vec'],
+                                     label_cols=['label'],
                                      batch_size=args.batch_size,
                                      epochs=args.epochs,
                                      verbose=1)
@@ -116,7 +115,7 @@ torch_model = torch_estimator.fit(train_df).setOutputCols(['label_prob'])
 
 # Evaluate the model on the held-out test DataFrame
 pred_df = torch_model.transform(test_df)
-argmax = F.udf(lambda v: float(np.argmax(v)), returnType=T.DoubleType())
+argmax = udf(lambda v: float(np.argmax(v)), returnType=T.DoubleType())
 pred_df = pred_df.withColumn('label_pred', argmax(pred_df.label_prob))
 evaluator = MulticlassClassificationEvaluator(predictionCol='label_pred', labelCol='label', metricName='accuracy')
 print('Test accuracy:', evaluator.evaluate(pred_df))

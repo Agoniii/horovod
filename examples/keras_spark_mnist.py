@@ -6,12 +6,12 @@ import subprocess
 
 import numpy as np
 
-import pyspark.sql.functions as F
 import pyspark.sql.types as T
 from pyspark import SparkConf
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 from pyspark.ml.feature import OneHotEncoderEstimator
 from pyspark.sql import SparkSession
+from pyspark.sql.functions import udf
 
 import tensorflow as tf
 from tensorflow import keras
@@ -111,7 +111,7 @@ keras_model = keras_estimator.fit(train_df).setOutputCols(['label_prob'])
 
 # Evaluate the model on the held-out test DataFrame
 pred_df = keras_model.transform(test_df)
-argmax = F.udf(lambda v: float(np.argmax(v)), returnType=T.DoubleType())
+argmax = udf(lambda v: float(np.argmax(v)), returnType=T.DoubleType())
 pred_df = pred_df.withColumn('label_pred', argmax(pred_df.label_prob))
 evaluator = MulticlassClassificationEvaluator(predictionCol='label_pred', labelCol='label', metricName='accuracy')
 print('Test accuracy:', evaluator.evaluate(pred_df))
