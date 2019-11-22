@@ -392,7 +392,9 @@ class TorchModel(Model, ModelParams, TorchEstimatorParamsWritable, TorchEstimato
                 data = [torch.tensor([row[col]]).reshape(shape) for
                         col, shape in zip(feature_cols, input_shapes)]
 
-                preds = model(*data)
+                with torch.no_grad():
+                    preds = model(*data)
+
                 if not isinstance(preds, list) and not isinstance(preds, tuple):
                     preds = [preds]
 
@@ -410,13 +412,15 @@ class TorchModel(Model, ModelParams, TorchEstimatorParamsWritable, TorchEstimato
                         nonzero_indices = flattened_pred.nonzero()[0]
                         field = SparseVector(shape, nonzero_indices,
                                              flattened_pred[nonzero_indices])
-                    else:
+                    elif pred.shape.numel() == 1:
                         # If the column is scalar type, int, float, etc.
                         value = pred.item()
                         python_type = util.spark_scalar_to_python_type(col_type)
                         if issubclass(python_type, numbers.Integral):
                             value = round(value)
                         field = python_type(value)
+                    else:
+                        field = DenseVector(pred.reshape(-1))
 
                     fields[output_col] = field
 

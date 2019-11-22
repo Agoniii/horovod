@@ -30,20 +30,9 @@ from pyspark.sql.types import (IntegerType, StringType, FloatType,
 from pyspark.sql.types import from_arrow_type
 
 from horovod.run.common.util import codec
-from horovod.spark.common import cache
+from horovod.spark.common import cache, constants
 
 _training_cache = cache.TrainingDataCache()
-
-ARRAY = 'array'
-CUSTOM_SPARSE = 'custom_sparse_format'
-NOCHANGE = 'nochange'
-
-MIXED_SPARSE_DENSE_VECTOR = 'mixed_sparse_dense_vector'
-SPARSE_VECTOR = 'sparse_vector'
-DENSE_VECTOR = 'dense_vector'
-
-TOTAL_BUFFER_MEMORY_CAP = 4
-ONE_GB = 1073741824
 
 
 def data_type_to_str(dtype):
@@ -277,22 +266,22 @@ def _get_metadata(df):
             # DenseVector), convert all of the values to dense vector
             is_sparse_vector_only = False
             spark_data_type = DenseVector
-            convert_to_target = ARRAY
+            convert_to_target = constants.ARRAY
         elif DenseVector in col_types:
             # If a col has DenseVector type (whether it is mixed sparse and dense vector or just
             # DenseVector), convert all of the values to dense vector
             is_sparse_vector_only = False
             spark_data_type = DenseVector
-            convert_to_target = ARRAY
+            convert_to_target = constants.ARRAY
         elif SparseVector in col_types:
             # If a col has only sparse vectors, convert all the data into custom dense vectors
             is_sparse_vector_only = True
             spark_data_type = SparseVector
-            convert_to_target = CUSTOM_SPARSE
+            convert_to_target = constants.CUSTOM_SPARSE
         else:
             is_sparse_vector_only = False
             spark_data_type = type(field.dataType)
-            convert_to_target = NOCHANGE
+            convert_to_target = constants.NOCHANGE
 
         # Explanation of the fields in metadata
         #     dtype:
@@ -324,6 +313,9 @@ def _get_metadata(df):
 
 
 def to_petastorm_fn(schema_cols, metadata):
+    ARRAY = constants.ARRAY
+    CUSTOM_SPARSE = constants.CUSTOM_SPARSE
+
     # Convert Spark Vectors into arrays so Petastorm can read them
     def to_petastorm(row):
         import numpy as np
@@ -401,7 +393,7 @@ def get_simple_meta_from_parquet(store, label_columns, feature_columns, sample_w
             'spark_data_type': pyarrow_to_spark_data_type(col_schema.type),
             'is_sparse_vector_only': False,
             'shape': None,  # Only used by SparseVector columns
-            'intermediate_format': NOCHANGE,
+            'intermediate_format': constants.NOCHANGE,
             'max_size': None  # Only used by SparseVector columns
         }
         metadata[col] = col_info
@@ -555,6 +547,8 @@ def is_module_available_fn():
 
 
 def serialize_fn():
+    is_module_available = is_module_available_fn()
+
     def _serialize(model):
         """Serialize model into byte array encoded into base 64."""
         if is_module_available('torch'):

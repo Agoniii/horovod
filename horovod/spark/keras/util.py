@@ -23,7 +23,7 @@ import tensorflow as tf
 
 from horovod.run.common.util import codec
 
-from horovod.spark.common import params, util
+from horovod.spark.common import constants, params
 from horovod.spark.keras import optimizer, remote
 
 
@@ -129,7 +129,7 @@ class TFKerasUtil(object):
 
     @staticmethod
     def _reshape_fn(sample_weight_col, feature_columns, label_columns, metadata):
-        CUSTOM_SPARSE = util.CUSTOM_SPARSE
+        CUSTOM_SPARSE = constants.CUSTOM_SPARSE
         custom_sparse_to_dense = _custom_sparse_to_dense_fn()
 
         def reshape(row):
@@ -334,7 +334,7 @@ class BareKerasUtil(object):
     @staticmethod
     def _prepare_data_fn(metadata):
         convert_custom_sparse_to_dense = BareKerasUtil._convert_custom_sparse_to_dense_fn()
-        CUSTOM_SPARSE = util.CUSTOM_SPARSE
+        CUSTOM_SPARSE = constants.CUSTOM_SPARSE
 
         def prepare_data(rows, col, shape):
             intermediate_format = metadata[col]['intermediate_format']

@@ -28,6 +28,10 @@ from horovod.spark.common import constants, util
 
 
 PETASTORM_HDFS_DRIVER = constants.PETASTORM_HDFS_DRIVER
+METRIC_PRINT_FREQUENCY = constants.METRIC_PRINT_FREQUENCY
+TOTAL_BUFFER_MEMORY_CAP = constants.TOTAL_BUFFER_MEMORY_CAP
+ONE_GB = constants.ONE_GB
+CUSTOM_SPARSE = constants.CUSTOM_SPARSE
 
 
 def RemoteTrainer(estimator, metadata, last_checkpoint_state, run_id):
@@ -48,7 +52,7 @@ def RemoteTrainer(estimator, metadata, last_checkpoint_state, run_id):
     user_shuffle_buffer_size = estimator.getShufflingBufferSize()
     user_verbose = estimator.getVerbose()
     train_minibatch_fn = estimator.getTrainMinibatchFn()
-    train_minibatch = train_minibatch_fn() if train_minibatch_fn else _train_minibatch_fn()
+    train_minibatch = train_minibatch_fn if train_minibatch_fn else _train_minibatch_fn()
 
     # If loss weight is not provided, use equal loss for all the labels
     label_columns = estimator.getLabelCols()
@@ -167,11 +171,14 @@ def RemoteTrainer(estimator, metadata, last_checkpoint_state, run_id):
             ckpt_file = os.path.join(run_output_dir, remote_store.checkpoint_filename)
 
             def save_checkpoint():
+                model.cpu()
                 state = {
                     'model': model.state_dict(),
                     'optimizer': optimizer.state_dict(),
                 }
                 torch.save(state, ckpt_file)
+                if cuda_available:
+                    model.cuda()
 
             # Petastorm: read data from the store with the correct shard for this rank
             # setting num_epochs=None will cause an infinite iterator
@@ -220,8 +227,9 @@ def RemoteTrainer(estimator, metadata, last_checkpoint_state, run_id):
 
                         # reshape labels to match the output shape of the model
                         if hasattr(outputs[0], 'shape'):
-                            labels = [label.reshape(output.shape) for label, output in
-                                      zip(labels, outputs)]
+                            labels = [label.reshape(output.shape)
+                                      if output.shape.numel() == label.shape.numel() else label
+                                      for label, output in zip(labels, outputs)]
                         return outputs, labels
 
                     def aggregate_metrics(stage, epoch, loss, metric_value_groups):
@@ -240,7 +248,7 @@ def RemoteTrainer(estimator, metadata, last_checkpoint_state, run_id):
 
                     def print_metrics(batch_idx, loss, metric_value_groups, phase):
                         if user_verbose > 0 and hvd.rank() == 0 and \
-                                batch_idx % constants.METRIC_PRINT_FREQUENCY == 0:
+                                batch_idx % METRIC_PRINT_FREQUENCY == 0:
                             print("epoch:\t{epoch}\tstep\t{batch_idx}:\t{metrics}".
                                   format(epoch=epoch,
                                          batch_idx=batch_idx,
@@ -364,9 +372,6 @@ def _get_optimizer_with_unscaled_lr_fn():
 
 
 def _calculate_shuffle_buffer_size_fn():
-    TOTAL_BUFFER_MEMORY_CAP = util.TOTAL_BUFFER_MEMORY_CAP
-    ONE_GB = util.ONE_GB
-
     def calculate_shuffle_buffer_size(hvd, avg_row_size, train_row_count_per_worker):
         """
         Determines the shuffling buffer size such that each worker gets at most 1GB for shuffling
@@ -441,8 +446,6 @@ def _metric_cls():
 
 
 def _prepare_np_data_fn():
-    CUSTOM_SPARSE = util.CUSTOM_SPARSE
-
     def prepare_np_data(rows, col_name, metadata):
         intermediate_format = metadata[col_name]['intermediate_format']
         if intermediate_format != CUSTOM_SPARSE:

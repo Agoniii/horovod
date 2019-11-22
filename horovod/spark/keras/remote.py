@@ -29,6 +29,8 @@ from horovod.spark.common import constants, util
 
 
 PETASTORM_HDFS_DRIVER = constants.PETASTORM_HDFS_DRIVER
+TOTAL_BUFFER_MEMORY_CAP = constants.TOTAL_BUFFER_MEMORY_CAP
+ONE_GB = constants.ONE_GB
 
 
 def RemoteTrainer(estimator, metadata, keras_utils, run_id):
@@ -206,9 +208,6 @@ def _deserialize_keras_model_fn():
 
 
 def _calculate_shuffle_buffer_size_fn():
-    TOTAL_BUFFER_MEMORY_CAP = util.TOTAL_BUFFER_MEMORY_CAP
-    ONE_GB = util.ONE_GB
-
     def calculate_shuffle_buffer_size(hvd, avg_row_size, train_row_count_per_worker):
         """
         Determines the shuffling buffer size such that each worker gets at most 1GB for shuffling

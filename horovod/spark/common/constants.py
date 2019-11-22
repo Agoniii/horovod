@@ -17,3 +17,14 @@ from __future__ import absolute_import
 
 PETASTORM_HDFS_DRIVER = 'libhdfs'
 METRIC_PRINT_FREQUENCY = 1000  # to print metric every 1000 steps in verbose mode
+
+ARRAY = 'array'
+CUSTOM_SPARSE = 'custom_sparse_format'
+NOCHANGE = 'nochange'
+
+MIXED_SPARSE_DENSE_VECTOR = 'mixed_sparse_dense_vector'
+SPARSE_VECTOR = 'sparse_vector'
+DENSE_VECTOR = 'dense_vector'
+
+TOTAL_BUFFER_MEMORY_CAP = 4
+ONE_GB = 1073741824
