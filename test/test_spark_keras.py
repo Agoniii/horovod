@@ -91,39 +91,39 @@ def test_restore_from_checkpoint(mock_fit_fn):
     with spark_session('test_restore_from_checkpoint') as spark:
         df = create_xor_data(spark)
 
-    backend = CallbackBackend()
+        backend = CallbackBackend()
 
-    run_id = 'run01'
-    with local_store() as store:
-        keras_estimator = hvd.KerasEstimator(
-            backend=backend,
-            store=store,
-            model=model,
-            optimizer=optimizer,
-            loss=loss,
-            feature_cols=['features'],
-            label_cols=['y'],
-            batch_size=1,
-            epochs=3,
-            verbose=2,
-            run_id=run_id)
+        run_id = 'run01'
+        with local_store() as store:
+            keras_estimator = hvd.KerasEstimator(
+                backend=backend,
+                store=store,
+                model=model,
+                optimizer=optimizer,
+                loss=loss,
+                feature_cols=['features'],
+                label_cols=['y'],
+                batch_size=1,
+                epochs=3,
+                verbose=2,
+                run_id=run_id)
 
-        keras_estimator._load_model_from_checkpoint = mock.Mock(
-            side_effect=keras_estimator._load_model_from_checkpoint)
+            keras_estimator._load_model_from_checkpoint = mock.Mock(
+                side_effect=keras_estimator._load_model_from_checkpoint)
 
-        ckpt_path = store.get_checkpoint_path(run_id)
-        assert not store.exists(ckpt_path)
-        keras_estimator._load_model_from_checkpoint.assert_not_called()
-        keras_model = keras_estimator.fit(df)
+            ckpt_path = store.get_checkpoint_path(run_id)
+            assert not store.exists(ckpt_path)
+            keras_estimator._load_model_from_checkpoint.assert_not_called()
+            keras_model = keras_estimator.fit(df)
 
-        trained_model = keras_model.getModel()
-        pred = trained_model.predict([np.ones([1, 2], dtype=np.float64)])
-        assert len(pred) == 1
+            trained_model = keras_model.getModel()
+            pred = trained_model.predict([np.ones([1, 2], dtype=np.float64)])
+            assert len(pred) == 1
 
-        assert store.exists(ckpt_path)
+            assert store.exists(ckpt_path)
 
-        keras_estimator.fit(df)
-        keras_estimator._load_model_from_checkpoint.assert_called()
+            keras_estimator.fit(df)
+            keras_estimator._load_model_from_checkpoint.assert_called()
 
 
 @mock.patch('horovod.spark.keras.util.TFKerasUtil.fit_fn')
@@ -133,33 +133,33 @@ def test_keras_direct_parquet_train(mock_fit_fn):
     with spark_session('test_keras_direct_parquet_train') as spark:
         df = create_xor_data(spark)
 
-    backend = CallbackBackend()
-    with local_store() as store:
-        util.prepare_data(backend.num_processes(),
-                          store,
-                          df,
-                          feature_columns=['features'],
-                          label_columns=['y'])
+        backend = CallbackBackend()
+        with local_store() as store:
+            util.prepare_data(backend.num_processes(),
+                              store,
+                              df,
+                              feature_columns=['features'],
+                              label_columns=['y'])
 
-        model = create_xor_model()
-        optimizer = tf.keras.optimizers.SGD(lr=0.1)
-        loss = 'binary_crossentropy'
+            model = create_xor_model()
+            optimizer = tf.keras.optimizers.SGD(lr=0.1)
+            loss = 'binary_crossentropy'
 
-        est = hvd.KerasEstimator(
-            backend=backend,
-            store=store,
-            model=model,
-            optimizer=optimizer,
-            loss=loss,
-            feature_cols=['features'],
-            label_cols=['y'],
-            batch_size=1,
-            epochs=3,
-            verbose=2)
+            est = hvd.KerasEstimator(
+                backend=backend,
+                store=store,
+                model=model,
+                optimizer=optimizer,
+                loss=loss,
+                feature_cols=['features'],
+                label_cols=['y'],
+                batch_size=1,
+                epochs=3,
+                verbose=2)
 
-        transformer = est.fit_on_parquet()
-        predictions = transformer.transform(df)
-        assert predictions.count() == df.count()
+            transformer = est.fit_on_parquet()
+            predictions = transformer.transform(df)
+            assert predictions.count() == df.count()
 
 
 @mock.patch('horovod.spark.keras.estimator.remote.RemoteTrainer')
@@ -175,31 +175,31 @@ def test_model_serialization(mock_remote_trainer):
     with spark_session('test_model_serialization') as spark:
         df = create_xor_data(spark)
 
-    keras_estimator = hvd.KerasEstimator(
-        model=model,
-        optimizer=optimizer,
-        loss=loss,
-        feature_cols=['features'],
-        label_cols=['y'],
-        batch_size=1,
-        epochs=3,
-        verbose=2)
+        keras_estimator = hvd.KerasEstimator(
+            model=model,
+            optimizer=optimizer,
+            loss=loss,
+            feature_cols=['features'],
+            label_cols=['y'],
+            batch_size=1,
+            epochs=3,
+            verbose=2)
 
-    backend = CallbackBackend()
-    with local_store() as store:
-        with temppath() as saved_path:
-            keras_estimator.save(saved_path)
-            keras_estimator_loaded = hvd.KerasEstimator.load(saved_path)
+        backend = CallbackBackend()
+        with local_store() as store:
+            with temppath() as saved_path:
+                keras_estimator.save(saved_path)
+                keras_estimator_loaded = hvd.KerasEstimator.load(saved_path)
 
-        keras_model = keras_estimator_loaded.fit(df, params={
-            keras_estimator_loaded.backend: backend,
-            keras_estimator_loaded.store: store
-        })
+            keras_model = keras_estimator_loaded.fit(df, params={
+                keras_estimator_loaded.backend: backend,
+                keras_estimator_loaded.store: store
+            })
 
-        trained_model = keras_model.getModel()
-        pred = trained_model.predict([np.ones([1, 2], dtype=np.float32)])
-        assert len(pred) == 1
-        assert pred.dtype == np.float32
+            trained_model = keras_model.getModel()
+            pred = trained_model.predict([np.ones([1, 2], dtype=np.float32)])
+            assert len(pred) == 1
+            assert pred.dtype == np.float32
 
 
 def test_serialize_param_value():
