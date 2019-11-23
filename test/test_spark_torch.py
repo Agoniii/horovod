@@ -79,7 +79,7 @@ def test_fit_model():
             trained_model = torch_model.getModel()
             pred = trained_model(torch.ones([1, 2], dtype=torch.int32))
             assert len(pred) == 1
-            assert pred.dtype == np.float32
+            assert pred.dtype == torch.float32
 
 
 def test_restore_from_checkpoint():
@@ -238,40 +238,21 @@ def test_construct_metric_value_holders_one_metric_for_all_labels():
 
 def test_prepare_np_data():
     with spark_session('test_prepare_np_data') as spark:
-        input_dim = 8
-        data_rows = 10
-
         df = create_xor_data(spark)
 
         train_rows = df.count()
-        schema_cols = ['dense_col_0', 'mixed_col_0', 'sparse_col_0']
+        schema_cols = ['features', 'y']
         metadata = util._get_metadata(df)
+        assert metadata['features']['intermediate_format'] == constants.ARRAY
 
         to_petastorm = util.to_petastorm_fn(schema_cols, metadata)
         modified_df = df.rdd.map(to_petastorm).toDF()
-
-        raw_data = df.rdd.collect()
-        sparse_col_0_data_in_dense_form = np.array(
-            [raw_data[i].sparse_col_0.toArray() for i in range(train_rows)])
-
         data = modified_df.collect()
-        dense_col_0_data = torch.tensor([data[i].dense_col_0 for i in range(train_rows)])
-        mixed_col_0_data = torch.tensor([data[i].mixed_col_0 for i in range(train_rows)])
-        sparse_col_0_data = torch.tensor([data[i].sparse_col_0 for i in range(train_rows)])
 
         prepare_np_data = remote._prepare_np_data_fn()
-
-        # These two must be identical
-        dense_col_0_data_prepared = prepare_np_data(dense_col_0_data, 'dense_col_0', metadata)
-        assert np.array_equal(dense_col_0_data_prepared, dense_col_0_data)
-
-        # These two must be identical
-        mixed_col_0_data_prepared = prepare_np_data(mixed_col_0_data, 'mixed_col_0', metadata)
-        assert np.array_equal(mixed_col_0_data_prepared, mixed_col_0_data)
-
-        # These two must be float-equal.
-        sparse_col_0_data_prepared = prepare_np_data(sparse_col_0_data, 'sparse_col_0', metadata)
-        assert np.allclose(sparse_col_0_data_prepared, sparse_col_0_data_in_dense_form)
+        features = torch.tensor([data[i].features for i in range(train_rows)])
+        features_prepared = prepare_np_data(features, 'features', metadata)
+        assert np.array_equal(features_prepared, features)
 
 
 def test_get_metric_avgs():
