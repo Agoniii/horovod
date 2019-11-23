@@ -24,7 +24,7 @@ import tensorflow as tf
 from pyspark.ml.linalg import DenseVector, SparseVector
 
 import horovod.spark.keras as hvd
-from horovod.spark.common import util
+from horovod.spark.common import constants, util
 from horovod.spark.keras import remote
 from horovod.spark.keras.estimator import EstimatorParams
 from horovod.spark.keras.util import _custom_sparse_to_dense_fn, _serialize_param_value, BareKerasUtil, TFKerasUtil
@@ -240,7 +240,7 @@ def test_calculate_shuffle_buffer_size():
     calculate_shuffle_buffer_size = remote._calculate_shuffle_buffer_size_fn()
     shuffle_size = calculate_shuffle_buffer_size(hvd_mock, avg_row_size, train_row_count_per_worker)
 
-    assert int(shuffle_size) == int(util.TOTAL_BUFFER_MEMORY_CAP * util.ONE_GB / avg_row_size / 5)
+    assert int(shuffle_size) == int(constants.TOTAL_BUFFER_MEMORY_CAP * constants.ONE_GB / avg_row_size / 5)
 
 
 def test_custom_sparse_to_dense_fn():
@@ -335,19 +335,19 @@ def test_batch_generator_fn():
         {
             'col1': {
                 'dtype': float,
-                'intermediate_format': util.NOCHANGE,
+                'intermediate_format': constants.NOCHANGE,
                 'max_size': 1,
                 'shape': 1
             },
             'col2': {
                 'dtype': DenseVector,
-                'intermediate_format': util.ARRAY,
+                'intermediate_format': constants.ARRAY,
                 'max_size': 10,
                 'shape': 10
             },
             'label': {
                 'dtype': float,
-                'intermediate_format': util.NOCHANGE,
+                'intermediate_format': constants.NOCHANGE,
                 'max_size': 1,
                 'shape': 1
             },
@@ -383,19 +383,19 @@ def test_reshape():
         {
             'col1': {
                 'dtype': float,
-                'intermediate_format': util.NOCHANGE,
+                'intermediate_format': constants.NOCHANGE,
                 'max_size': 1,
                 'shape': 1
             },
             'col2': {
                 'dtype': SparseVector,
-                'intermediate_format': util.CUSTOM_SPARSE,
+                'intermediate_format': constants.CUSTOM_SPARSE,
                 'max_size': 5,
                 'shape': 10
             },
             'label': {
                 'dtype': float,
-                'intermediate_format': util.NOCHANGE,
+                'intermediate_format': constants.NOCHANGE,
                 'max_size': 1,
                 'shape': 1
             },
