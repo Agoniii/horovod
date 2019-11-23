@@ -109,7 +109,7 @@ run_all() {
     exclude_keras_if_needed="| sed 's/[a-z_]*keras[a-z_.]*//g'"
   fi
 
-  local exclude_interactiverun="| sed 's/test_interactiverun.py//g'"
+  local exclude_interactiverun="| sed 's/test_interactiverun.py//g' | sed 's/test_spark_keras.py//g' | sed 's/test_spark_torch.py//g'"
 
   # pytests have 4x GPU use cases and require a separate queue
   run_test "${test}" "${pytest_queue}" \
@@ -180,8 +180,16 @@ run_all() {
 
   # Horovod Spark Estimator tests
   run_test "${test}" "${queue}" \
-    ":spark: Test Spark Keras MNIST (${test})" \
+      ":spark: PyTests Spark Estimators (${test})" \
+      "bash -c \"cd /horovod/test && pytest -v --capture=no test_spark_keras.py test_spark_torch.py\""
+
+  run_test "${test}" "${queue}" \
+    ":spark: Spark Keras MNIST (${test})" \
     "bash -c \"OMP_NUM_THREADS=1 python /horovod/examples/keras_spark_mnist.py\""
+
+  run_test "${test}" "${queue}" \
+    ":spark: Spark Torch MNIST (${test})" \
+    "bash -c \"OMP_NUM_THREADS=1 python /horovod/examples/keras_torch_mnist.py\""
 }
 
 run_gloo() {
@@ -195,7 +203,7 @@ run_gloo() {
     exclude_spark_if_needed="| sed 's/[a-z_]*spark[a-z_.]*//g'"
   fi
 
-  local exclude_interactiverun="| sed 's/test_interactiverun.py//g'"
+  local exclude_interactiverun="| sed 's/test_interactiverun.py//g' | sed 's/test_spark_keras.py//g' | sed 's/test_spark_torch.py//g'"
 
   run_test "${test}" "${pytest_queue}" \
     ":pytest: Run PyTests (${test})" \
