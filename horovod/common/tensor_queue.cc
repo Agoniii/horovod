@@ -58,7 +58,7 @@ TensorQueue::GetTensorDataForAutotuner(const ResponseList& response_list,
       for (auto& tensor_name : response.tensor_names()) {
         tensor_names.push_back(tensor_name);
         LOG(TRACE) << "Looking for tensor with name " << tensor_name;
-        auto& entry = tensor_table_.at(tensor_name);
+        auto& entry = GetTensorEntry(tensor_name);
         LOG(TRACE) << "Found tensor with name " << tensor_name;
         total_tensor_size += entry.tensor->size();
       }
